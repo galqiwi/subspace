@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/galqiwi/subspace/internal/hello/cmd"
+	clientcmd "github.com/galqiwi/subspace/internal/client/cmd"
+	servercmd "github.com/galqiwi/subspace/internal/server/cmd"
 
 	"github.com/spf13/cobra"
 )
 
 var SubspaceCmd = &cobra.Command{
-	Use:   "subspace",
-	Short: "subspace utils",
+	Use:           "subspace",
+	Short:         "expose local http services through a public server",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {
-	SubspaceCmd.AddCommand(cmd.HelloCmd)
+	SubspaceCmd.AddCommand(servercmd.ServerCmd)
+	SubspaceCmd.AddCommand(clientcmd.ClientCmd)
 }
 
 func main() {
