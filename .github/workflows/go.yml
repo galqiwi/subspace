@@ -1,0 +1,32 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25.3'
+
+    - name: Build Static Binary
+      run: |
+        CGO_ENABLED=0 go build -v -ldflags '-extldflags "-static"' -o subspace ./cmd/subspace/...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: subspace
+        path: |
+          subspace
