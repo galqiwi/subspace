@@ -49,7 +49,7 @@ func init() {
 		&options.UpstreamAuthorization,
 		"upstream-authorization",
 		"",
-		"Authorization header value sent to local port, e.g. \"Bearer sk-...\" (stripped if not set)",
+		"Authorization header value sent to local port, e.g. \"Bearer <token>\" (stripped if not set)",
 	)
 	for _, name := range []string{"server", "token", "id", "port"} {
 		_ = ClientCmd.MarkFlagRequired(name)

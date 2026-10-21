@@ -94,29 +94,29 @@ func TestRouting(t *testing.T) {
 		expectedAuth          string
 	}{
 		{name: "stripped", upstreamAuthorization: "", expectedAuth: ""},
-		{name: "replaced", upstreamAuthorization: "Bearer sk-local", expectedAuth: "Bearer sk-local"},
+		{name: "replaced", upstreamAuthorization: "Bearer local-token", expectedAuth: "Bearer local-token"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			serverURL := startServer(t)
 			startClient(t, client.Options{
 				ServerURL:             serverURL,
 				Token:                 clientToken,
-				Id:                    "gpu-a",
+				Id:                    "node-a",
 				Port:                  startBackend(t, echoBackend("a")),
 				UpstreamAuthorization: tc.upstreamAuthorization,
 			})
 			startClient(t, client.Options{
 				ServerURL: serverURL,
 				Token:     clientToken,
-				Id:        "gpu-b",
+				Id:        "node-b",
 				Port:      startBackend(t, echoBackend("b")),
 			})
-			waitRoutedTo(t, serverURL, "gpu-a", "a")
-			waitRoutedTo(t, serverURL, "gpu-b", "b")
+			waitRoutedTo(t, serverURL, "node-a", "a")
+			waitRoutedTo(t, serverURL, "node-b", "b")
 
-			status, body := request(t, serverURL, "gpu-a", "/v1/chat/completions?x=1", "hello")
+			status, body := request(t, serverURL, "node-a", "/some/path?x=1", "hello")
 			require.Equal(t, http.StatusOK, status)
-			require.Equal(t, fmt.Sprintf("a POST /v1/chat/completions?x=1 auth=%q body=hello", tc.expectedAuth), body)
+			require.Equal(t, fmt.Sprintf("a POST /some/path?x=1 auth=%q body=hello", tc.expectedAuth), body)
 		})
 	}
 }
@@ -130,7 +130,7 @@ func TestRequestErrors(t *testing.T) {
 		expectedStatus int
 	}{
 		{name: "no bearer", id: "", expectedStatus: http.StatusUnauthorized},
-		{name: "unknown id", id: "gpu-unknown", expectedStatus: http.StatusNotFound},
+		{name: "unknown id", id: "node-unknown", expectedStatus: http.StatusNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			status, _ := request(t, serverURL, tc.id, "/", "")
@@ -146,10 +146,10 @@ func TestUpstreamRefused(t *testing.T) {
 	require.NoError(t, listener.Close())
 
 	serverURL := startServer(t)
-	startClient(t, client.Options{ServerURL: serverURL, Token: clientToken, Id: "gpu", Port: port})
+	startClient(t, client.Options{ServerURL: serverURL, Token: clientToken, Id: "node", Port: port})
 
 	require.Eventually(t, func() bool {
-		status, _ := request(t, serverURL, "gpu", "/", "")
+		status, _ := request(t, serverURL, "node", "/", "")
 		return status == http.StatusBadGateway
 	}, 10*time.Second, 20*time.Millisecond)
 }
@@ -159,7 +159,7 @@ func TestInvalidClientToken(t *testing.T) {
 	err := client.Run(context.Background(), client.Options{
 		ServerURL: serverURL,
 		Token:     "wrong",
-		Id:        "gpu",
+		Id:        "node",
 		Port:      startBackend(t, echoBackend("a")),
 	})
 	require.True(t, errors.Is(err, client.ErrUnauthorized))
@@ -170,23 +170,23 @@ func TestDuplicateId(t *testing.T) {
 	first := startClient(t, client.Options{
 		ServerURL: serverURL,
 		Token:     clientToken,
-		Id:        "gpu",
+		Id:        "node",
 		Port:      startBackend(t, echoBackend("first")),
 	})
-	waitRoutedTo(t, serverURL, "gpu", "first")
+	waitRoutedTo(t, serverURL, "node", "first")
 
 	startClient(t, client.Options{
 		ServerURL: serverURL,
 		Token:     clientToken,
-		Id:        "gpu",
+		Id:        "node",
 		Port:      startBackend(t, echoBackend("second")),
 	})
 	time.Sleep(500 * time.Millisecond)
-	_, body := request(t, serverURL, "gpu", "/", "")
+	_, body := request(t, serverURL, "node", "/", "")
 	require.True(t, strings.HasPrefix(body, "first "), body)
 
 	first.stop(t)
-	waitRoutedTo(t, serverURL, "gpu", "second")
+	waitRoutedTo(t, serverURL, "node", "second")
 }
 
 func TestStreaming(t *testing.T) {
@@ -200,12 +200,12 @@ func TestStreaming(t *testing.T) {
 	})
 
 	serverURL := startServer(t)
-	startClient(t, client.Options{ServerURL: serverURL, Token: clientToken, Id: "gpu", Port: port})
+	startClient(t, client.Options{ServerURL: serverURL, Token: clientToken, Id: "node", Port: port})
 	var resp *http.Response
 	require.Eventually(t, func() bool {
 		req, err := http.NewRequest(http.MethodGet, serverURL+"/stream", nil)
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer gpu")
+		req.Header.Set("Authorization", "Bearer node")
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		if resp.StatusCode != http.StatusOK {
