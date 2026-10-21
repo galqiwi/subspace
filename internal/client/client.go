@@ -93,7 +93,11 @@ func runSession(ctx context.Context, options Options) (bool, error) {
 		}
 	}()
 
-	httpServer := &http.Server{Handler: newUpstreamProxy(options)}
+	proxy := newUpstreamProxy(options)
+	httpServer := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = http.NewResponseController(w).EnableFullDuplex()
+		proxy.ServeHTTP(w, r)
+	})}
 	defer func() {
 		_ = httpServer.Close()
 	}()

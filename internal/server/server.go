@@ -121,5 +121,6 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no client is connected with this id", http.StatusNotFound)
 		return
 	}
+	_ = http.NewResponseController(w).EnableFullDuplex()
 	proxy.ServeHTTP(w, r)
 }

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -227,4 +229,52 @@ func TestStreaming(t *testing.T) {
 	rest, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.Equal(t, "\ndata: second\n\n", string(rest))
+}
+
+func TestConcurrentStreamingWithRequestBody(t *testing.T) {
+	const nChunks = 50
+	port := startBackend(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < nChunks; i++ {
+			_, _ = fmt.Fprint(w, "data: x\n\n")
+			w.(http.Flusher).Flush()
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+	serverURL := startServer(t)
+	startClient(t, client.Options{ServerURL: serverURL, Token: clientToken, Id: "node", Port: port})
+	waitRoutedTo(t, serverURL, "node", "data:")
+
+	httpClient := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 512}}
+	for round := 0; round < 3; round++ {
+		var wg sync.WaitGroup
+		var failures atomic.Int64
+		for i := 0; i < 512; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				req, err := http.NewRequest(http.MethodPost, serverURL+"/", strings.NewReader(strings.Repeat("x", 1500)))
+				if err != nil {
+					failures.Add(1)
+					return
+				}
+				req.Header.Set("Authorization", "Bearer node")
+				resp, err := httpClient.Do(req)
+				if err != nil {
+					failures.Add(1)
+					return
+				}
+				defer func() {
+					_ = resp.Body.Close()
+				}()
+				body, err := io.ReadAll(resp.Body)
+				if err != nil || string(body) != strings.Repeat("data: x\n\n", nChunks) {
+					failures.Add(1)
+				}
+			}()
+		}
+		wg.Wait()
+		require.Equal(t, int64(0), failures.Load(), "round %v", round)
+	}
 }
